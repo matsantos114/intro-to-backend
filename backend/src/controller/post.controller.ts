@@ -1,6 +1,7 @@
+import type { Request, Response } from "express";
 import { Post } from "../models/post.model.js";
 
-const createPost = async (req, res) => {
+const createPost = async (req: Request, res: Response) => {
   try {
     const { name, description, age } = req.body;
 
@@ -19,10 +20,15 @@ const createPost = async (req, res) => {
       message: "Post created succesfully",
       post,
     });
-  } catch (error) {}
+  } catch (error) {
+    res.status(500).json({
+      message: "Internal Server Error",
+      error,
+    });
+  }
 };
 
-const getPost = async (req, res) => {
+const getPost = async (req: Request, res: Response) => {
   try {
     const posts = await Post.find();
     res.status(200).json(posts);
@@ -34,7 +40,7 @@ const getPost = async (req, res) => {
   }
 };
 
-const updatePost = async (req, res) => {
+const updatePost = async (req: Request, res: Response) => {
   try {
     if (Object.keys(req.body).length === 0) {
       res.status(400).json({
@@ -61,17 +67,17 @@ const updatePost = async (req, res) => {
   }
 };
 
-const deletePost = async (req, res) => {
+const deletePost = async (req: Request, res: Response) => {
   try {
     const deleted = await Post.findByIdAndDelete(req.params.id);
-    if(!deleted){
-        res.status(404).json({
-            message: "Post not found here"
-        })
+    if (!deleted) {
+      res.status(404).json({
+        message: "Post not found here",
+      });
     }
     res.status(200).json({
-        message: "Post succesfully deleted"
-    })
+      message: "Post succesfully deleted",
+    });
   } catch (error) {
     res.status(500).json({
       message: "Internal Server error",

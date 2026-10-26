@@ -2,11 +2,13 @@
   "name": "intro-to-backend",
   "version": "1.0.0",
   "description": "a tutorial for intro to backend",
-  "main": "backend/src/index.js",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "start": "node backend/src/index.js",
-    "dev": "nodemon backend/src/index.js"
+    "dev": "tsx watch backend/src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
@@ -22,7 +24,13 @@
     "bcrypt": "^6.0.0",
     "dotenv": "^17.4.2",
     "express": "^5.3.0",
-    "mongoose": "^8.24.7",
-    "nodemon": "^3.1.14"
+    "mongoose": "^8.24.7"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

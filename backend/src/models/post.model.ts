@@ -1,6 +1,12 @@
 import mongoose, { Schema } from "mongoose";
 
-const postSchema = new Schema(
+interface IPost {
+    name: string;
+    description: string;
+    age: number;
+}
+
+const postSchema = new Schema<IPost>(
     {
         name:{
             type: String,
@@ -24,4 +30,4 @@ const postSchema = new Schema(
     }
 )
 
-export const Post = mongoose.model('post', postSchema);
+export const Post = mongoose.model<IPost>('post', postSchema);
