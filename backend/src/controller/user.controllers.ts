@@ -1,101 +1,81 @@
 import type { Request, Response } from "express";
 import { User } from "../models/user.model.js";
+import { AppError } from "../utils/AppError.js";
+import type { RegisterInput, LoginInput } from "../schemas/user.schema.js";
+
+// There is no try/catch in this file on purpose.
+// When something throws, Express sends the error to errorHandler,
+// which decides what the client sees.
 
 const registeredUser = async (req: Request, res: Response) => {
-  try {
-    const { username, email, password } = req.body;
-    // basic validation
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: "all fields are important" });
-    }
+  // The validate middleware already checked this body against registerSchema,
+  // so every field is present and valid. The email and username are also
+  // already trimmed and lowercased.
+  const input: RegisterInput = req.body;
 
-    // check
-    const existing = await User.findOne({ email: email });
-    if (existing) {
-      return res.status(400).json({ message: "user already exists" });
-    }
-
-    const user = await User.create({
-      username,
-      email,
-      password,
-      loggedIn: false,
-    });
-
-    res.status(201).json({
-      message: "User registered",
-      user: { id: user._id, email: user.email, username: username },
-    });
-  } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Internal Server Error",
-        error: error instanceof Error ? error.message : String(error),
-      });
+  // check whether this email is already registered
+  const existingUser = await User.findOne({ email: input.email });
+  if (existingUser) {
+    throw new AppError(409, "User already exists");
   }
+
+  const user = await User.create({
+    username: input.username,
+    email: input.email,
+    password: input.password,
+  });
+
+  res.status(201).json({
+    message: "User registered",
+    user: {
+      id: user._id,
+      email: user.email,
+      username: user.username,
+    },
+  });
 };
 
 const loginUser = async (req: Request, res: Response) => {
-  try {
-    // if the user already exists
-    const { email, password } = req.body;
-    const user = await User.findOne({
-      email: email,
-    });
+  // The validate middleware already checked this body against loginSchema,
+  // so the password is guaranteed to be present text.
+  const input: LoginInput = req.body;
 
-    if (!user) {
-      return res.status(400).json({
-        message: "User not found",
-      });
-    }
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch)
-      return res.status(400).json({
-        message: "Invalid Credentials",
-      });
+  const user = await User.findOne({ email: input.email });
 
-    res.status(200).json({
-      message: "User Logged In",
-      user: {
-        id: user._id,
-        email: user.email,
-        username: user.username,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      message: "Internal Server Error",
-    });
+  // We use the SAME message whether the email is unknown or the password is wrong.
+  // Different messages would tell an attacker which emails have accounts.
+  if (!user) {
+    throw new AppError(401, "Invalid credentials");
   }
+
+  const passwordMatches = await user.comparePassword(input.password);
+  if (!passwordMatches) {
+    throw new AppError(401, "Invalid credentials");
+  }
+
+  res.status(200).json({
+    message: "User logged in",
+    user: {
+      id: user._id,
+      email: user.email,
+      username: user.username,
+    },
+  });
 };
 
 const logoutUser = async (req: Request, res: Response) => {
-  try {
-    // retrieve request body data
-    //checks / validations
-    // business logic
-    // update db
-    // send response
-    const { email } = req.body;
+  const email = req.body.email;
 
-    const user = await User.findOne({
-      email: email,
-    });
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-      });
-    }
-    res.status(200).json({
-      message: "Logout Successful",
-    });
-  } catch (error) {
-    res.status(500).json({
-      message: "Internal Server Error",
-      error: error,
-    });
+  const user = await User.findOne({ email: email });
+  if (!user) {
+    throw new AppError(404, "User not found");
   }
+
+  // Nothing to undo yet, because login does not issue a token or session.
+  // That changes when we add real authentication.
+  res.status(200).json({
+    message: "Logout successful",
+  });
 };
 
 export { registeredUser, loginUser, logoutUser };

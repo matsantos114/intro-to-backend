@@ -1,25 +1,25 @@
 import type { Request, Response } from "express";
 import { Post } from "../models/post.model.js";
 import { AppError } from "../utils/AppError.js";
+import type {
+  CreatePostInput,
+  UpdatePostInput,
+} from "../schemas/post.schema.js";
 
 // There is no try/catch in this file on purpose.
 // When something throws, Express sends the error to errorHandler,
 // which decides what the client sees.
 
 const createPost = async (req: Request, res: Response) => {
-  // Read each field out of the request body one by one.
-  const name = req.body.name;
-  const description = req.body.description;
-  const age = req.body.age;
-
-  if (!name || !description || !age) {
-    throw new AppError(400, "All fields are required");
-  }
+  // The validate middleware already checked this body against createPostSchema,
+  // so we can tell TypeScript its real shape. There is no need to check for
+  // missing fields here anymore.
+  const input: CreatePostInput = req.body;
 
   const post = await Post.create({
-    name: name,
-    description: description,
-    age: age,
+    name: input.name,
+    description: input.description,
+    age: input.age,
   });
 
   res.status(201).json({
@@ -35,12 +35,18 @@ const getPost = async (req: Request, res: Response) => {
 };
 
 const updatePost = async (req: Request, res: Response) => {
-  const bodyKeys = Object.keys(req.body);
-  if (bodyKeys.length === 0) {
+  // The validate middleware already checked this body against updatePostSchema.
+  // It only contains name, description and age, and each one is optional.
+  const input: UpdatePostInput = req.body;
+
+  // Zod removes unknown fields, so a body like { "admin": true } arrives here as {}.
+  // An update that changes nothing is a client mistake, so we reject it.
+  const providedFields = Object.keys(input);
+  if (providedFields.length === 0) {
     throw new AppError(400, "No data provided");
   }
 
-  const post = await Post.findByIdAndUpdate(req.params.id, req.body, {
+  const post = await Post.findByIdAndUpdate(req.params.id, input, {
     new: true,
   });
 
