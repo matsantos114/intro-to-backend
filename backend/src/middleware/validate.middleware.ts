@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import type { ZodType } from "zod";
 import { AppError } from "../utils/AppError.js";
+import type { FieldError } from "../utils/AppError.js";
 
 // `validate` is a function that RECEIVES a schema and RETURNS a middleware.
 // We call validate(...) once, when the server starts and the routes are set up.
@@ -12,17 +13,22 @@ export const validate = (schema: ZodType) => {
     const result = schema.safeParse(req.body);
 
     if (result.success === false) {
-      // Turn the list of problems into one readable message,
-      // for example: "age: Age must be a number, name: Name must be text"
-      const problems: string[] = [];
+      // Turn each Zod problem into one FieldError, so a client can tell
+      // exactly which field was wrong, for example:
+      //   [{ field: "age", message: "Age must be a number" },
+      //    { field: "name", message: "Name must be text" }]
+      const fields: FieldError[] = [];
       for (const issue of result.error.issues) {
         const fieldName = issue.path.join(".");
-        problems.push(fieldName + ": " + issue.message);
+        const fieldError: FieldError = {
+          field: fieldName,
+          message: issue.message,
+        };
+        fields.push(fieldError);
       }
-      const message = problems.join(", ");
 
       // Stop here. The controller never runs.
-      throw new AppError(400, message);
+      throw new AppError(400, "Invalid request body", fields);
     }
 
     // Replace the raw body with Zod's cleaned-up copy:

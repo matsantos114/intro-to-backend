@@ -45,6 +45,17 @@ type PostIdParams = {
   id: string;
 };
 
+const handleGetPost = async (req: Request<PostIdParams>, res: Response) => {
+  // 1. Read.
+  const id = req.params.id;
+
+  // 2. Delegate. The service throws a 404 if the post does not exist.
+  const post = await postService.getPost(id);
+
+  // 3. Respond.
+  res.status(200).json(post);
+};
+
 const handleUpdatePost = async (req: Request<PostIdParams>, res: Response) => {
   // 1. Read. The validate middleware already checked this body against updatePostSchema.
   const id = req.params.id;
@@ -67,15 +78,15 @@ const handleDeletePost = async (req: Request<PostIdParams>, res: Response) => {
   // 2. Delegate. The service throws a 404 if the post does not exist.
   await postService.deletePost(id);
 
-  // 3. Respond.
-  res.status(200).json({
-    message: "Post successfully deleted",
-  });
+  // 3. Respond. 204 means "it worked, and there is nothing to send back".
+  // A 204 response has no body, so we use .send() with nothing instead of .json().
+  res.status(204).send();
 };
 
 export {
   handleCreatePost,
   handleListPosts,
+  handleGetPost,
   handleUpdatePost,
   handleDeletePost,
 };

@@ -23,6 +23,18 @@ const listPosts = async () => {
   return posts;
 };
 
+const getPost = async (id: string) => {
+  const post = await postRepository.findById(id);
+
+  // Rule: you can only read a post that exists.
+  // The repository returns null when nothing matched; here we decide that means 404.
+  if (!post) {
+    throw new AppError(404, "Post not found");
+  }
+
+  return post;
+};
+
 const updatePost = async (id: string, input: UpdatePostInput) => {
   // Rule: an update must change at least one field.
   // Zod removes unknown fields, so a body like { "admin": true } arrives here as {}.
@@ -51,4 +63,4 @@ const deletePost = async (id: string) => {
   }
 };
 
-export { createPost, listPosts, updatePost, deletePost };
+export { createPost, listPosts, getPost, updatePost, deletePost };

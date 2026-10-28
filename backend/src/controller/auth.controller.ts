@@ -2,7 +2,8 @@ import type { Request, Response } from "express";
 import * as userService from "../services/user.service.js";
 import type { RegisterInput, LoginInput } from "../schemas/user.schema.js";
 
-// The user controller handles HTTP only.
+// The auth controller handles HTTP only, for register, login and logout.
+// It calls the USER service, because those actions are about users.
 // Each function is named handle... because it handles one HTTP request.
 // That keeps it distinct from the service function it calls (userService.loginUser).
 // Every function has three parts:

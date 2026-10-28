@@ -28,6 +28,13 @@ const findAll = async () => {
   return posts;
 };
 
+// Returns the post with this id, or null if there is none.
+const findById = async (id: string) => {
+  const post = await Post.findById(id);
+
+  return post;
+};
+
 // Returns the updated post, or null if no post has this id.
 const updateById = async (id: string, fields: UpdatePostInput) => {
   const post = await Post.findByIdAndUpdate(id, fields, {
@@ -44,4 +51,4 @@ const deleteById = async (id: string) => {
   return deletedPost;
 };
 
-export { create, findAll, updateById, deleteById };
+export { create, findAll, findById, updateById, deleteById };

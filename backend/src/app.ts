@@ -1,5 +1,5 @@
 import express from "express";
-import userRouter from "./routes/user.routes.js";
+import authRouter from "./routes/auth.routes.js";
 import postRouter from "./routes/post.routes.js";
 import { notFound, errorHandler } from "./middleware/error.middleware.js";
 
@@ -7,8 +7,10 @@ const app = express(); // creating the express app
 app.use(express.json());
 
 // app.ts receives all the routes
-// example route: http://localhost:4000/api/v1/users/register
-app.use("/api/v1/users", userRouter);
+// example route: http://localhost:4000/api/v1/auth/register
+// Register, login and logout are actions, not things, so they live under /auth
+// instead of following the /resource/:id pattern that posts use.
+app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/posts", postRouter);
 
 // These two must stay at the bottom. Express runs middleware from top to bottom.

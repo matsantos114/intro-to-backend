@@ -1,11 +1,26 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../utils/AppError.js";
+import type { FieldError } from "../utils/AppError.js";
+
+// Every error response in this API has the same shape:
+//   { "error": { "message": "...", "fields": [ ... ] } }
+// `fields` is only included when there are field problems (validation errors).
+
+// The shape of the `error` object we send.
+// The question mark makes `fields` optional: a 404 has no fields to report.
+type ErrorBody = {
+  message: string;
+  fields?: FieldError[];
+};
 
 // Runs only when no route matched the request.
 // Example: the client calls GET /api/v1/banana, which does not exist.
 export const notFound = (req: Request, res: Response) => {
-  const message = "Route not found: " + req.method + " " + req.originalUrl;
-  res.status(404).json({ message: message });
+  const errorBody: ErrorBody = {
+    message: "Route not found: " + req.method + " " + req.originalUrl,
+  };
+
+  res.status(404).json({ error: errorBody });
 };
 
 // Runs whenever an error is thrown anywhere in a route or controller.
@@ -19,9 +34,18 @@ export const errorHandler = (
   next: NextFunction,
 ) => {
   // Case 1: an error we threw on purpose, like AppError(404, "Post not found").
-  // It is safe to show its message to the client.
+  // It is safe to show its message (and its field problems) to the client.
   if (error instanceof AppError) {
-    res.status(error.statusCode).json({ message: error.message });
+    const errorBody: ErrorBody = {
+      message: error.message,
+    };
+
+    // Only add `fields` when there is something in it.
+    if (error.fields.length > 0) {
+      errorBody.fields = error.fields;
+    }
+
+    res.status(error.statusCode).json({ error: errorBody });
     return;
   }
 
@@ -29,5 +53,10 @@ export const errorHandler = (
   // Print the details in our terminal so we can debug it,
   // but send the client only a generic message so we do not leak internals.
   console.error(error);
-  res.status(500).json({ message: "Internal Server Error" });
+
+  const errorBody: ErrorBody = {
+    message: "Internal Server Error",
+  };
+
+  res.status(500).json({ error: errorBody });
 };
