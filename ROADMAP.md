@@ -17,10 +17,23 @@ in this order:
    concept at a time, until I understand every layer a request passes through:
 
    ```
-   client → middleware → route → controller → service → data layer → database
+   client → middleware → route → controller → service → repository → database
                                                                          │
-   client ← response ← controller ← service ← data layer ←───────────────┘
+   client ← response ← controller ← service ← repository ←───────────────┘
+
+   anything throws at any layer → errorHandler → error response
    ```
+
+   | Layer | Folder | Job | Knows `req`/`res`? | Knows the database? |
+   |---|---|---|---|---|
+   | Entry | `index.ts` | start the server, connect the database | no | connects only |
+   | App | `app.ts` | global middleware, mount routers, error handlers last | yes | no |
+   | Routes | `routes/` | URL + method → middleware + controller | yes | no |
+   | Middleware | `middleware/` | validate input, (later) check login, handle errors | yes | no |
+   | Controller | `controller/` | read the request, call a service, send the success response | **yes** | **no** |
+   | Service | `services/` | business rules; returns plain results; throws `AppError` | **no** | **no** |
+   | Repository | `repositories/` | database calls only; returns `null` when nothing matched | no | **yes** |
+   | Model / schema | `models/` (Mongo), `db/` (Postgres, step 4) | the shape of the stored data | no | yes |
 
 2. **Turn it into the backend for a Substack-style publishing platform**:
    writers run publications and publish posts, readers subscribe (free or paid),
@@ -50,8 +63,8 @@ teaches a backend skill that the earlier steps prepared me for
 | | 2 | Convert to TypeScript | Done |
 | | 3a | Central error handling | Done |
 | | 3b | Request validation with Zod | Done |
-| | 3c | Service layer | **Next** |
-| | 3d | RESTful routes and API conventions | Not started |
+| | 3c | Service and repository layers | Done |
+| | 3d | RESTful routes and API conventions | **Next** |
 | 2. Data and identity | 4 | MongoDB → PostgreSQL | Not started |
 | | 5 | Authentication and authorization | Not started |
 | 3. Production-ready | 6 | Testing | Not started |
@@ -84,6 +97,8 @@ Decisions already made, and why. Revisit one only with a reason.
 | Docker for local Postgres | Same database on any machine; no installing Postgres by hand. |
 | Neon to host (not Supabase) | Plain Postgres. Supabase bundles auth and auto-generated APIs, which are exactly the things I want to build myself. |
 | Service layer before the database swap | So the swap only touches one layer, and I can see why layering matters. |
+| Separate repository layer | Chosen for learning. Services hold only rules; repositories hold only database calls. Cost: some service functions just pass calls through until they gain rules (expected from step 5 and step 11). Benefit: the step 4 swap rewrites `repositories/` and leaves services alone. |
+| Services return `PublicUser`, never the raw user | The password hash cannot leak through a controller, even by accident. |
 
 Still to decide (decide when we reach the step): sessions vs JWT (step 5),
 test runner (step 6), logger (step 7), API host (step 9), job queue (step 14),
@@ -147,31 +162,50 @@ inputs), `safeParse`, `.optional()`, `z.infer`, where middleware can sit
 (app, router, or a single route), and that Zod checks the email format before
 trimming unless you `.pipe()`.
 
-#### Step 3c: Service layer (next)
+#### Step 3c: Service and repository layers (done)
 
-**Why:** controllers currently do two jobs: handle HTTP *and* talk to the database.
+**Why:** controllers did two jobs: handle HTTP *and* talk to the database.
 Mixing them makes both harder to change and to test.
 
-**Learn:**
-- Separation of concerns: what belongs in a controller vs a service
-- The controller's job: read the request, call a service, choose the success status, send the response
-- The service's job: business rules ("is this email taken?") and data access
-- Why services must not know about `req` or `res`
-- Where errors are thrown from (services throw `AppError` too)
+- [x] `repositories/post.repository.ts`: `create`, `findAll`, `updateById`, `deleteById` (Mongoose only)
+- [x] `services/post.service.ts`: `createPost`, `listPosts`, `updatePost`, `deletePost` (rules only)
+- [x] `post.controller.ts`: read, delegate, respond; typed `req.params` with `Request<PostIdParams>`
+- [x] `repositories/user.repository.ts`: `create`, `findByEmail`
+- [x] `services/user.service.ts`: `registerUser` (409 rule), `loginUser` (401 rule), `logoutUser`; returns `PublicUser`
+- [x] `user.controllers.ts`: read, delegate, respond
+- [x] Verified: only repositories import a model; no controller imports a repository or model
+- [x] Controller functions renamed to `handle...` so they cannot be confused with the service functions they call
 
-**Tasks:**
-- [ ] `services/post.service.ts`: create, list, update, delete
-- [ ] Post controller calls the service instead of `Post` directly
-- [ ] `services/user.service.ts`: register (including the duplicate check), find by email
-- [ ] User controller calls the service
-- [ ] Confirm: no controller imports a model anymore
+**Naming convention** (use it for every new feature):
+
+| Layer | Pattern | Example |
+|---|---|---|
+| Controller | `handle` + action | `handleLogin`, `handleUpdatePost` |
+| Service | what the app does | `loginUser`, `updatePost` |
+| Repository | database operation | `findByEmail`, `updateById` |
+
+**Learned:** separation of concerns; controller = HTTP, service = rules,
+repository = data; the repository returns `null` and the service decides it means 404;
+rules can run before, after, and around repository calls; Zod checks the *shape*
+of input, services check things that need the app's *state*; checks run cheapest
+first and the request stops at the first one that fails; `await` pauses the
+caller until the layers below answer, and re-throws if any of them threw;
+`import * as`;
+`Request<Params>` generics; Express 5 types params as `string | string[]`;
+structural typing (`UserFromDatabase`).
+
+**Known gap:** password hashing (pre-save hook) and `comparePassword` are still
+Mongoose model features the user service depends on. They move into the service
+in step 4.
 
 **Done when I can explain:**
 - If we swapped MongoDB for Postgres tomorrow, which files would change, and why only those?
 - Why shouldn't a service function receive `req`?
+- Why does the repository return `null` instead of throwing a 404?
 - Where does the "user already exists" rule live now, and why there?
+- Name one rule that runs before the repository and one that runs after.
 
-#### Step 3d: RESTful routes and API conventions
+#### Step 3d: RESTful routes and API conventions (next)
 
 **Why:** our routes name *actions* (`/create`, `/update/:id`, `/delete/:id`).
 REST names *resources* and lets the HTTP method say the action. Every real API,
@@ -227,7 +261,9 @@ which every backend developer needs regardless of the ORM.
 - [ ] `db/index.ts` (connection pool)
 - [ ] First migration, generated and applied
 - [ ] A seed script with sample data
-- [ ] Rewrite the service files to use Drizzle instead of Mongoose
+- [ ] Rewrite the repository files to use Drizzle instead of Mongoose (services and controllers should not change)
+- [ ] Move password hashing and `comparePassword` out of the model and into the user service
+- [ ] Repositories describe their own input types instead of borrowing the Zod input types
 - [ ] Translate database errors (e.g. unique violation → 409) in one place
 - [ ] Remove `mongoose`, the Mongo models, and `database.ts`
 - [ ] Extend `validate` to cover `req.params` (the `:id`) and `req.query`
@@ -259,7 +295,6 @@ cannot tell who is making a request, and anyone can edit any post.
 
 **Tasks:**
 - [ ] Decide sessions vs JWT and write the reasoning in the decision log
-- [ ] Hashing moves into the user service
 - [ ] Login issues the session/token; logout revokes it
 - [ ] `requireAuth` middleware attaches the current user to the request
 - [ ] Posts get an `authorId`; only the author can edit or delete (403 otherwise)
@@ -611,12 +646,21 @@ Add to this as each step lands.
 | Closure | An inner function that remembers variables from the outer function that created it. |
 | Schema (Zod) | A description of what data must look like, checked at runtime. |
 | `safeParse` | Zod check that returns `{ success, data or error }` instead of throwing. |
+| Separation of concerns | Each layer has one job, so changing one job touches one layer. |
+| Service | The layer for business rules. No `req`/`res`, no direct database calls. |
+| Repository | The layer for database calls only. Returns what the database said, including `null`. |
+| Business rule | A decision about how the app works that needs app state or who is asking ("post must exist", "email already taken"). |
+| Pass-through | A function that only forwards a call to the next layer, because it has no rules yet. |
+| `import * as x` | Import everything a file exports into one object, so calls read `x.create(...)`. |
+| Structural typing | TypeScript accepts any object that has the required fields, whatever it is called. |
 
 ## 10. Known gaps (on purpose, for later)
 
 - `:id` in URLs is not validated, so `/update/banana` returns a 500. (Step 4)
 - Routes name actions (`/create`, `/update/:id`) instead of resources. (Step 3d)
-- `logout` takes an email and does nothing. (Step 5)
+- `logout` takes an unvalidated email and does nothing. (Step 5)
+- The user service still relies on Mongoose's pre-save hook and `comparePassword`. (Step 4)
+- `createPost` and `listPosts` in the post service are pass-throughs with no rules yet. (Steps 5 and 11)
 - No tests yet. (Step 6)
 - `express.json()` has no explicit size limit. (Step 8)
 - `post` fields (`name`, `description`, `age`) are course placeholders. (Step 10)

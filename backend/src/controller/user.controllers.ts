@@ -1,81 +1,56 @@
 import type { Request, Response } from "express";
-import { User } from "../models/user.model.js";
-import { AppError } from "../utils/AppError.js";
+import * as userService from "../services/user.service.js";
 import type { RegisterInput, LoginInput } from "../schemas/user.schema.js";
 
-// There is no try/catch in this file on purpose.
-// When something throws, Express sends the error to errorHandler,
-// which decides what the client sees.
+// The user controller handles HTTP only.
+// Each function is named handle... because it handles one HTTP request.
+// That keeps it distinct from the service function it calls (userService.loginUser).
+// Every function has three parts:
+//   1. read what it needs from the request
+//   2. hand the work to the user service
+//   3. send the success response
+// It never talks to the database, and it has no try/catch:
+// if the service throws, Express sends the error to errorHandler.
 
-const registeredUser = async (req: Request, res: Response) => {
-  // The validate middleware already checked this body against registerSchema,
-  // so every field is present and valid. The email and username are also
-  // already trimmed and lowercased.
+const handleRegister = async (req: Request, res: Response) => {
+  // 1. Read. The validate middleware already checked this body against registerSchema.
   const input: RegisterInput = req.body;
 
-  // check whether this email is already registered
-  const existingUser = await User.findOne({ email: input.email });
-  if (existingUser) {
-    throw new AppError(409, "User already exists");
-  }
+  // 2. Delegate. The service throws a 409 if the email is already registered.
+  const user = await userService.registerUser(input);
 
-  const user = await User.create({
-    username: input.username,
-    email: input.email,
-    password: input.password,
-  });
-
+  // 3. Respond. `user` is a PublicUser, so it never contains the password hash.
   res.status(201).json({
     message: "User registered",
-    user: {
-      id: user._id,
-      email: user.email,
-      username: user.username,
-    },
+    user: user,
   });
 };
 
-const loginUser = async (req: Request, res: Response) => {
-  // The validate middleware already checked this body against loginSchema,
-  // so the password is guaranteed to be present text.
+const handleLogin = async (req: Request, res: Response) => {
+  // 1. Read. The validate middleware already checked this body against loginSchema.
   const input: LoginInput = req.body;
 
-  const user = await User.findOne({ email: input.email });
+  // 2. Delegate. The service throws a 401 if the email or password is wrong.
+  const user = await userService.loginUser(input);
 
-  // We use the SAME message whether the email is unknown or the password is wrong.
-  // Different messages would tell an attacker which emails have accounts.
-  if (!user) {
-    throw new AppError(401, "Invalid credentials");
-  }
-
-  const passwordMatches = await user.comparePassword(input.password);
-  if (!passwordMatches) {
-    throw new AppError(401, "Invalid credentials");
-  }
-
+  // 3. Respond.
   res.status(200).json({
     message: "User logged in",
-    user: {
-      id: user._id,
-      email: user.email,
-      username: user.username,
-    },
+    user: user,
   });
 };
 
-const logoutUser = async (req: Request, res: Response) => {
+const handleLogout = async (req: Request, res: Response) => {
+  // 1. Read. This body is NOT validated yet; logout is rewritten in step 5.
   const email = req.body.email;
 
-  const user = await User.findOne({ email: email });
-  if (!user) {
-    throw new AppError(404, "User not found");
-  }
+  // 2. Delegate. The service throws a 404 if the user does not exist.
+  await userService.logoutUser(email);
 
-  // Nothing to undo yet, because login does not issue a token or session.
-  // That changes when we add real authentication.
+  // 3. Respond.
   res.status(200).json({
     message: "Logout successful",
   });
 };
 
-export { registeredUser, loginUser, logoutUser };
+export { handleRegister, handleLogin, handleLogout };
