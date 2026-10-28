@@ -12,6 +12,8 @@ import type {
 //   1. read what it needs from the request
 //   2. hand the work to the post service
 //   3. send the success response
+// Every success response with a body has the same shape: { "data": ... }
+// (Errors are shaped by errorHandler: { "error": { "message": ... } })
 // It never talks to the database, and it has no try/catch:
 // if the service throws, Express sends the error to errorHandler.
 
@@ -23,10 +25,7 @@ const handleCreatePost = async (req: Request, res: Response) => {
   const post = await postService.createPost(input);
 
   // 3. Respond.
-  res.status(201).json({
-    message: "Post created successfully",
-    post: post,
-  });
+  res.status(201).json({ data: post });
 };
 
 const handleListPosts = async (req: Request, res: Response) => {
@@ -36,10 +35,10 @@ const handleListPosts = async (req: Request, res: Response) => {
   const posts = await postService.listPosts();
 
   // 3. Respond.
-  res.status(200).json(posts);
+  res.status(200).json({ data: posts });
 };
 
-// The shape of the URL parameters for routes like /update/:id and /delete/:id.
+// The shape of the URL parameters for the /posts/:id routes (get, update, delete).
 // Passing it to Request<...> tells TypeScript that req.params.id is a single string.
 type PostIdParams = {
   id: string;
@@ -53,7 +52,7 @@ const handleGetPost = async (req: Request<PostIdParams>, res: Response) => {
   const post = await postService.getPost(id);
 
   // 3. Respond.
-  res.status(200).json(post);
+  res.status(200).json({ data: post });
 };
 
 const handleUpdatePost = async (req: Request<PostIdParams>, res: Response) => {
@@ -65,10 +64,7 @@ const handleUpdatePost = async (req: Request<PostIdParams>, res: Response) => {
   const post = await postService.updatePost(id, input);
 
   // 3. Respond.
-  res.status(200).json({
-    message: "Post updated",
-    post: post,
-  });
+  res.status(200).json({ data: post });
 };
 
 const handleDeletePost = async (req: Request<PostIdParams>, res: Response) => {

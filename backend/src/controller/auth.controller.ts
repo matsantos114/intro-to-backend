@@ -10,6 +10,8 @@ import type { RegisterInput, LoginInput } from "../schemas/user.schema.js";
 //   1. read what it needs from the request
 //   2. hand the work to the user service
 //   3. send the success response
+// Every success response with a body has the same shape: { "data": ... }
+// (Errors are shaped by errorHandler: { "error": { "message": ... } })
 // It never talks to the database, and it has no try/catch:
 // if the service throws, Express sends the error to errorHandler.
 
@@ -21,10 +23,7 @@ const handleRegister = async (req: Request, res: Response) => {
   const user = await userService.registerUser(input);
 
   // 3. Respond. `user` is a PublicUser, so it never contains the password hash.
-  res.status(201).json({
-    message: "User registered",
-    user: user,
-  });
+  res.status(201).json({ data: user });
 };
 
 const handleLogin = async (req: Request, res: Response) => {
@@ -35,10 +34,7 @@ const handleLogin = async (req: Request, res: Response) => {
   const user = await userService.loginUser(input);
 
   // 3. Respond.
-  res.status(200).json({
-    message: "User logged in",
-    user: user,
-  });
+  res.status(200).json({ data: user });
 };
 
 const handleLogout = async (req: Request, res: Response) => {
@@ -48,10 +44,8 @@ const handleLogout = async (req: Request, res: Response) => {
   // 2. Delegate. The service throws a 404 if the user does not exist.
   await userService.logoutUser(email);
 
-  // 3. Respond.
-  res.status(200).json({
-    message: "Logout successful",
-  });
+  // 3. Respond. 204: it worked, and there is nothing to send back.
+  res.status(204).send();
 };
 
 export { handleRegister, handleLogin, handleLogout };
