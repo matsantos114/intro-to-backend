@@ -64,8 +64,8 @@ teaches a backend skill that the earlier steps prepared me for
 | | 3a | Central error handling | Done |
 | | 3b | Request validation with Zod | Done |
 | | 3c | Service and repository layers | Done |
-| | 3d | RESTful routes and API conventions | **Next** |
-| 2. Data and identity | 4 | MongoDB → PostgreSQL | Not started |
+| | 3d | RESTful routes and API conventions | Done |
+| 2. Data and identity | 4 | MongoDB → PostgreSQL | **Next** |
 | | 5 | Authentication and authorization | Not started |
 | 3. Production-ready | 6 | Testing | Not started |
 | | 7 | Configuration, logging, health | Not started |
@@ -99,6 +99,10 @@ Decisions already made, and why. Revisit one only with a reason.
 | Service layer before the database swap | So the swap only touches one layer, and I can see why layering matters. |
 | Separate repository layer | Chosen for learning. Services hold only rules; repositories hold only database calls. Cost: some service functions just pass calls through until they gain rules (expected from step 5 and step 11). Benefit: the step 4 swap rewrites `repositories/` and leaves services alone. |
 | Services return `PublicUser`, never the raw user | The password hash cannot leak through a controller, even by accident. |
+| REST URLs for resources (`/posts`, `/posts/:id`) | The method says the action; URLs become predictable for every future resource. |
+| Auth under `/api/v1/auth` with action names | Login is an action, not a thing. One labelled exception keeps `/users` free for real user resources later. |
+| Envelope responses: `{ data }` / `{ error: { message, fields } }` | One place to look on every route; room for pagination `meta` (step 12); per-field validation errors a client can use. |
+| 204 with no body for delete and logout | Nothing useful to return; the status code is the answer. |
 
 Still to decide (decide when we reach the step): sessions vs JWT (step 5),
 test runner (step 6), logger (step 7), API host (step 9), job queue (step 14),
@@ -172,7 +176,7 @@ Mixing them makes both harder to change and to test.
 - [x] `post.controller.ts`: read, delegate, respond; typed `req.params` with `Request<PostIdParams>`
 - [x] `repositories/user.repository.ts`: `create`, `findByEmail`
 - [x] `services/user.service.ts`: `registerUser` (409 rule), `loginUser` (401 rule), `logoutUser`; returns `PublicUser`
-- [x] `user.controllers.ts`: read, delegate, respond
+- [x] `user.controllers.ts`: read, delegate, respond (renamed `auth.controller.ts` in 3d)
 - [x] Verified: only repositories import a model; no controller imports a repository or model
 - [x] Controller functions renamed to `handle...` so they cannot be confused with the service functions they call
 
@@ -205,30 +209,58 @@ in step 4.
 - Where does the "user already exists" rule live now, and why there?
 - Name one rule that runs before the repository and one that runs after.
 
-#### Step 3d: RESTful routes and API conventions (next)
+#### Step 3d: RESTful routes and API conventions (done)
 
-**Why:** our routes name *actions* (`/create`, `/update/:id`, `/delete/:id`).
+**Why:** our routes named *actions* (`/create`, `/update/:id`, `/delete/:id`).
 REST names *resources* and lets the HTTP method say the action. Every real API,
 including the Substack one, follows this.
 
-**Learn:**
-- Resources vs actions; plural nouns (`/posts`, `/posts/:id`)
-- HTTP methods and their meaning: GET, POST, PUT, PATCH, DELETE
-- "Safe" (does not change data) and "idempotent" (repeating it has the same effect)
-- PUT (replace the whole thing) vs PATCH (change some fields)
-- API versioning (`/api/v1`), and why it exists
-- A consistent response shape for success and errors
-- 204 No Content for deletes
+**The API after 3d:**
 
-**Tasks:**
-- [ ] Posts become: `POST /posts`, `GET /posts`, `GET /posts/:id` (new), `PATCH /posts/:id`, `DELETE /posts/:id`
-- [ ] Decide one response shape and apply it everywhere
-- [ ] Auth routes stay as actions (`/auth/register`, `/auth/login`); know why that is acceptable
+```
+POST    /api/v1/posts          201 { data: post }
+GET     /api/v1/posts          200 { data: [posts] }
+GET     /api/v1/posts/:id      200 { data: post }
+PATCH   /api/v1/posts/:id      200 { data: post }
+DELETE  /api/v1/posts/:id      204 (no body)
+
+POST    /api/v1/auth/register  201 { data: user }
+POST    /api/v1/auth/login     200 { data: user }
+POST    /api/v1/auth/logout    204 (no body)
+
+any error                      4xx/500 { error: { message, fields? } }
+```
+
+- [x] `post.routes.ts`: two URLs (`/` and `/:id`), several methods each with `router.route(...).get(...).post(...)`
+- [x] Get one post, built bottom-up: `findById` → `getPost` (404 rule) → `handleGetPost` → `GET /:id`
+- [x] Delete returns 204 with `res.status(204).send()`
+- [x] Auth mounted at `/api/v1/auth`; files renamed `auth.routes.ts` and `auth.controller.ts` (service and repository stay "user")
+- [x] Response shape chosen: envelope
+- [x] `AppError` carries an optional `fields` list (`FieldError[]`)
+- [x] `validate` builds one `FieldError` per Zod issue instead of one joined string
+- [x] `errorHandler` and `notFound` send `{ error: { message, fields? } }`
+- [x] Both controllers send `{ data }`; logout returns 204
+
+**Learned:** resources vs actions; method meanings; safe and idempotent; why
+auth is an accepted exception; Express matches method *and* path (so a GET
+to a path with only PATCH/DELETE falls through to `notFound`); building a
+feature bottom-up so every file typechecks as it lands; 204 has no body
+(`.send()`, not `.json()`); optional parameters (`fields?`); storing `[]`
+instead of `undefined` so callers never need an existence check; envelope
+responses; each layer is named for what it is about *at that level*
+(auth at HTTP, user in the service).
+
+**Seen for real:** `GET /posts/feed` matches `/:id`, reaches Mongoose as
+`findById("feed")`, throws a `CastError`, and becomes a 500. The fix is
+validating `req.params` (step 4).
 
 **Done when I can explain:**
 - Why `DELETE /posts/5` is better than `POST /posts/delete/5`
 - Which methods are idempotent, and why that matters if a client retries a request
 - When I would use PUT instead of PATCH
+- Why `GET /posts/feed` used to give a 404 and now gives a 500
+- Why a list response is `{ data: [...] }` and not a bare array
+- Why the controller is `auth.controller.ts` but the service is `user.service.ts`
 
 ---
 
@@ -266,7 +298,8 @@ which every backend developer needs regardless of the ORM.
 - [ ] Repositories describe their own input types instead of borrowing the Zod input types
 - [ ] Translate database errors (e.g. unique violation → 409) in one place
 - [ ] Remove `mongoose`, the Mongo models, and `database.ts`
-- [ ] Extend `validate` to cover `req.params` (the `:id`) and `req.query`
+- [ ] Extend `validate` to cover `req.params` (the `:id`) and `req.query`, so `GET /posts/feed` becomes a 400, not a 500
+- [ ] Responses use `id` (no Mongo `_id` or `__v`)
 - [ ] Validate environment variables with Zod at startup (`config/env.ts`)
 
 **Done when I can explain:**
@@ -452,7 +485,7 @@ The placeholder `post` (with `name`, `description`, `age`) is replaced by the re
 **Tasks:**
 - [ ] Subscribe and unsubscribe to a publication
 - [ ] "My subscriptions" list
-- [ ] `GET /feed`: published posts from my subscriptions, newest first, cursor-paginated
+- [ ] `GET /feed`: published posts from my subscriptions, newest first, cursor-paginated, returned as `{ data: [...], meta: { nextCursor } }`
 - [ ] Subscriber count on a publication
 
 **Done when I can explain:**
@@ -617,8 +650,8 @@ likes                             users ↔ posts (many-to-many)
 |---|---|---|
 | 200 | OK | reads, updates, login |
 | 201 | Created | create post, register |
-| 204 | No Content | deletes (from step 3d) |
-| 400 | Bad request (malformed or invalid input) | Zod failures, "No data provided" |
+| 204 | No Content | delete post, logout |
+| 400 | Bad request (malformed or invalid input) | Zod failures (with `fields`), "No data provided" |
 | 401 | Not authenticated | login failures, missing token |
 | 403 | Authenticated but not allowed | editing someone else's post (step 5) |
 | 404 | Not found | missing post, unknown route |
@@ -653,11 +686,18 @@ Add to this as each step lands.
 | Pass-through | A function that only forwards a call to the next layer, because it has no rules yet. |
 | `import * as x` | Import everything a file exports into one object, so calls read `x.create(...)`. |
 | Structural typing | TypeScript accepts any object that has the required fields, whatever it is called. |
+| `await` | Pauses the caller until the called function answers; re-throws if it threw. |
+| REST | URLs name resources (`/posts/:id`); the HTTP method says what to do. |
+| Resource | A thing the API exposes, like a post. A collection (`/posts`) or one item (`/posts/:id`). |
+| Idempotent | Repeating the request has the same effect as doing it once (GET, PUT, DELETE; not POST). |
+| Envelope | Wrapping every response in the same outer shape: `{ data }` or `{ error }`. |
+| Optional parameter (`x?`) | A parameter callers may leave out; inside the function it is `undefined`. |
+| 204 No Content | Success with deliberately no body. Sent with `res.status(204).send()`. |
 
 ## 10. Known gaps (on purpose, for later)
 
-- `:id` in URLs is not validated, so `/update/banana` returns a 500. (Step 4)
-- Routes name actions (`/create`, `/update/:id`) instead of resources. (Step 3d)
+- `:id` in URLs is not validated, so `GET /posts/feed` or `/posts/banana` returns a 500 instead of a 400. (Step 4)
+- Mongo details leak into responses: `_id` instead of `id`, and `__v`. (Step 4)
 - `logout` takes an unvalidated email and does nothing. (Step 5)
 - The user service still relies on Mongoose's pre-save hook and `comparePassword`. (Step 4)
 - `createPost` and `listPosts` in the post service are pass-throughs with no rules yet. (Steps 5 and 11)
