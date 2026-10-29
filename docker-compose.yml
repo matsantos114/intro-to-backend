@@ -1,0 +1,43 @@
+# This file describes the services our app needs while we develop on a laptop.
+# Right now that is one thing: a PostgreSQL database.
+#
+#   docker compose up -d      start the database in the background
+#   docker compose down       stop it (your data is kept)
+#   docker compose down -v    stop it AND delete all its data (a fresh start)
+#
+# This is for DEVELOPMENT only. Production uses a managed database (Neon, step 9).
+
+services:
+  # "db" is the name of this service. Other tools on this machine reach it at localhost.
+  db:
+    # The image is the packaged template to run: PostgreSQL version 17.
+    image: postgres:17
+
+    # Restart it automatically unless we stopped it ourselves.
+    restart: unless-stopped
+
+    # These variables are read by the Postgres image the FIRST time it starts
+    # with an empty volume. They create the user, its password, and a database.
+    # They are throwaway development values, not real secrets.
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: substack
+
+    # Port mapping, written as  HOST:CONTAINER
+    # Inside the container, Postgres listens on 5432 (its standard port).
+    # Another Postgres already uses 5432 on this Mac, so we expose ours on 5433.
+    # From our laptop, the database is at localhost:5433.
+    ports:
+      - "5433:5432"
+
+    # A volume keeps the database files OUTSIDE the container.
+    # Without it, deleting the container would delete all the data.
+    # "pgdata" is the name of the volume; the path after the colon is where
+    # Postgres stores its files inside the container.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+# Declares the named volume used above. Docker creates and manages it.
+volumes:
+  pgdata:
